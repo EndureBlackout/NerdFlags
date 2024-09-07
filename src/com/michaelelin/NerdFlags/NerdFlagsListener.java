@@ -1,12 +1,8 @@
 package com.michaelelin.NerdFlags;
 
-import com.sk89q.worldedit.bukkit.BukkitAdapter;
-import com.sk89q.worldguard.LocalPlayer;
-import com.sk89q.worldguard.WorldGuard;
-import com.sk89q.worldguard.protection.association.RegionAssociable;
-import com.sk89q.worldguard.protection.flags.StateFlag;
-import com.sk89q.worldguard.protection.regions.RegionQuery;
-import com.sk89q.worldguard.session.SessionManager;
+import java.util.Arrays;
+import java.util.regex.Pattern;
+
 import org.apache.commons.lang.StringUtils;
 import org.bukkit.ChatColor;
 import org.bukkit.Effect;
@@ -25,6 +21,8 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
+import org.bukkit.event.block.BlockFadeEvent;
+import org.bukkit.event.block.BlockFormEvent;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.entity.EntityPortalEvent;
@@ -41,8 +39,13 @@ import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.event.player.PlayerTeleportEvent.TeleportCause;
 import org.bukkit.projectiles.ProjectileSource;
 
-import java.util.Arrays;
-import java.util.regex.Pattern;
+import com.sk89q.worldedit.bukkit.BukkitAdapter;
+import com.sk89q.worldguard.LocalPlayer;
+import com.sk89q.worldguard.WorldGuard;
+import com.sk89q.worldguard.protection.association.RegionAssociable;
+import com.sk89q.worldguard.protection.flags.StateFlag;
+import com.sk89q.worldguard.protection.regions.RegionQuery;
+import com.sk89q.worldguard.session.SessionManager;
 
 public class NerdFlagsListener implements Listener {
 
@@ -62,6 +65,21 @@ public class NerdFlagsListener implements Listener {
 		if (!canDrop) {
 			event.setCancelled(true);
 		}
+	}
+	
+	@EventHandler(ignoreCancelled = true)
+	public void onPathChange(BlockFadeEvent e) {
+		if(e.getBlock().getType().equals(Material.DIRT_PATH) && testState(e.getBlock().getLocation(), plugin.STOP_PATH_CHANGE)) {
+			e.setCancelled(true);
+		}
+	}
+
+	@EventHandler
+	public void onEggPlaceEvent(PlayerInteractEvent e) {
+		if(e.getAction() == Action.RIGHT_CLICK_BLOCK
+			&& e.getMaterial().toString().toLowerCase().contains("_egg") && testState(e.getPlayer().getLocation(), plugin.DENY_EGG_PLACE)) {
+				e.setCancelled(true);
+			}
 	}
 
 	@EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
@@ -203,6 +221,12 @@ public class NerdFlagsListener implements Listener {
 					break;
 				case DAYLIGHT_DETECTOR:
 					setCancelled(event, !testBuild(player, location, plugin.USE_DAYLIGHT_DETECTOR), true);
+					break;
+				case BOOKSHELF:
+					setCancelled(event, !testBuild(player, location, plugin.USE_BOOK_SHELF), true);
+					break;
+				case CHISELED_BOOKSHELF:
+					setCancelled(event, !testBuild(player, location, plugin.USE_BOOK_SHELF), true);
 					break;
 				default:
 				}

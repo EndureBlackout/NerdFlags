@@ -20,3 +20,9 @@ default-hopper: true
 default-dropper: true
 default-daylight-detector: false
 default-lectern: true
+default-book-shelf: false
+default-stop-path-change: false
+
+mysql_connectionstring: localhost
+mysql_username: admin
+mysql_password: pass

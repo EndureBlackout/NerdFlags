@@ -1,5 +1,29 @@
 package com.michaelelin.NerdFlags;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.logging.Level;
+
+import org.bukkit.Bukkit;
+import org.bukkit.GameMode;
+import org.bukkit.Material;
+import org.bukkit.entity.Player;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.plugin.Plugin;
+import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.util.io.BukkitObjectInputStream;
+import org.bukkit.util.io.BukkitObjectOutputStream;
+import org.yaml.snakeyaml.external.biz.base64Coder.Base64Coder;
+
 import com.comphenix.protocol.ProtocolLibrary;
 import com.comphenix.protocol.ProtocolManager;
 import com.sk89q.worldedit.WorldEdit;
@@ -9,13 +33,6 @@ import com.sk89q.worldguard.protection.flags.EnumFlag;
 import com.sk89q.worldguard.protection.flags.StateFlag;
 import com.sk89q.worldguard.protection.flags.StringFlag;
 import com.sk89q.worldguard.protection.flags.registry.FlagRegistry;
-import org.bukkit.GameMode;
-import org.bukkit.Material;
-import org.bukkit.entity.Player;
-import org.bukkit.plugin.Plugin;
-import org.bukkit.plugin.java.JavaPlugin;
-
-import java.util.logging.Level;
 
 public class NerdFlagsPlugin extends JavaPlugin {
 
@@ -25,6 +42,8 @@ public class NerdFlagsPlugin extends JavaPlugin {
 
     private Player nextTP;
     private long timestamp;
+    
+    public HashMap<String, ItemStack[]> PLAYER_INVENTORY = new HashMap<String, ItemStack[]>();
 
     ProtocolManager protocolManager;
 
@@ -46,6 +65,8 @@ public class NerdFlagsPlugin extends JavaPlugin {
     public StateFlag WEATHER;
 
     public StateFlag NERD_KEEP_INVENTORY;
+    
+    public StateFlag REGION_SEPARATE_INVENTORY;
 
     public StringFlag ENTRY_COMMANDS;
 
@@ -71,6 +92,13 @@ public class NerdFlagsPlugin extends JavaPlugin {
     public StateFlag USE_DROPPER;
     public StateFlag USE_DAYLIGHT_DETECTOR;
     public StateFlag TAKE_LECTERN_BOOK;
+    public StateFlag USE_BOOK_SHELF;
+    public StateFlag STOP_PATH_CHANGE;
+    public StateFlag DENY_EGG_PLACE;
+    
+    public String CONNECTION_STRING;
+    public String MYSQL_USER;
+    public String MYSQL_PASS;
 
     @Override
     public void onEnable() {
@@ -78,10 +106,44 @@ public class NerdFlagsPlugin extends JavaPlugin {
         if (checkPlugin("ProtocolLib", false)) {
             protocolManager = ProtocolLibrary.getProtocolManager();
         }
-
-        if (checkPlugin("WGRegionEvents", false)) {
-            getServer().getPluginManager().registerEvents(new NerdFlagsRegionListener(this), this);
+        
+        if(WorldGuard.getInstance().getPlatform().getSessionManager().registerHandler(Entry.FACTORY, null)) {
+        	getServer().getPluginManager().registerEvents(new NerdFlagsRegionListener(this), this);
         }
+        
+        CONNECTION_STRING = getConfig().getString("mysql_connectionstring");
+        MYSQL_USER = getConfig().getString("mysql_username");
+        MYSQL_PASS = getConfig().getString("mysql_password");
+        
+        try {
+        	Connection conn = DriverManager.getConnection(CONNECTION_STRING, MYSQL_USER, MYSQL_PASS);
+        	
+        	String query = "SELECT * FROM flag_inventory;";
+        	
+        	Statement stmt = conn.createStatement();
+        	ResultSet results = stmt.executeQuery(query);
+        	
+        	while(results.next()) {
+        		String key = results.getString(1);
+        		ItemStack[] value = fromBase64(results.getString(2));
+        		
+        		PLAYER_INVENTORY.put(key, value);
+        		
+        		String deleteQuery = "DELETE FROM flag_inventory WHERE regionuuid=?";
+        		
+        		PreparedStatement pStmt = conn.prepareStatement(deleteQuery);
+        		
+        		pStmt.setString(1, key);
+        		
+        		pStmt.execute();
+        	}
+        } catch (SQLException e) {
+        	Bukkit.getLogger().severe("Unable to retrieve inventories from database.");
+        	Bukkit.getLogger().info(e.getMessage());
+        } catch (IOException e) {
+			Bukkit.getLogger().severe("Unable to decrypt from Base64.");
+			Bukkit.getLogger().info(e.getMessage());
+		}
 
         getServer().getPluginManager().registerEvents(new NerdFlagsListener(this), this);
 
@@ -95,6 +157,72 @@ public class NerdFlagsPlugin extends JavaPlugin {
             worldguard = (WorldGuardPlugin) wgPlugin;
         }
 
+    }
+    
+    @Override
+    public void onDisable() {
+    	try {
+			Connection conn = DriverManager.getConnection(CONNECTION_STRING, MYSQL_USER, MYSQL_PASS);
+			
+	    	for(Map.Entry<String, ItemStack[]> inv : PLAYER_INVENTORY.entrySet()) {
+	    		String encodedInv = toBase64(inv.getValue());
+	    		
+	    		String query = "INSERT INTO flag_inventory (regionuuid, inventoryString) VALUES (? , ?);";
+	    		
+	    		PreparedStatement pStmt = conn.prepareStatement(query);
+	    		
+	    		pStmt.setString(1, inv.getKey());
+	    		pStmt.setString(2, encodedInv);
+	    		
+	    		pStmt.execute();
+	    		
+	    		pStmt.close();
+	    	}
+	    	
+	    	conn.close();
+		} catch (SQLException e) {
+			Bukkit.getLogger().log(Level.SEVERE, "There was an error writing the inventory to database");
+			Bukkit.getLogger().info(e.getMessage());
+		};
+    }
+    
+    public ItemStack[] fromBase64(String data) throws IOException {
+    	try {
+            ByteArrayInputStream inputStream = new ByteArrayInputStream(Base64Coder.decodeLines(data));
+            BukkitObjectInputStream dataInput = new BukkitObjectInputStream(inputStream);
+            ItemStack[] items = new ItemStack[dataInput.readInt()];
+    
+            // Read the serialized inventory
+            for (int i = 0; i < items.length; i++) {
+            	items[i] = (ItemStack) dataInput.readObject();
+            }
+            
+            dataInput.close();
+            return items;
+        } catch (ClassNotFoundException e) {
+            throw new IOException("Unable to decode class type.", e);
+        }
+    }
+    
+    public String toBase64(ItemStack[] inventory) throws IllegalStateException {
+        try {
+            ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+            BukkitObjectOutputStream dataOutput = new BukkitObjectOutputStream(outputStream);
+            
+            // Write the size of the inventory
+            dataOutput.writeInt(inventory.length);
+            
+            // Save every element in the list
+            for (int i = 0; i < inventory.length; i++) {
+                dataOutput.writeObject(inventory[i]);
+            }
+            
+            // Serialize that array
+            dataOutput.close();
+            return Base64Coder.encodeLines(outputStream.toByteArray());
+        } catch (Exception e) {
+            throw new IllegalStateException("Unable to save item stacks.", e);
+        }
     }
 
     private <T extends Plugin> boolean checkPlugin(String name, boolean required) {
@@ -144,8 +272,12 @@ public class NerdFlagsPlugin extends JavaPlugin {
         flagRegistry.register(new StringFlag("created-by"));
         flagRegistry.register(new StringFlag("first-owner"));
         flagRegistry.register(ENTRY_COMMANDS = new StringFlag("entry-commands"));
+        flagRegistry.register(REGION_SEPARATE_INVENTORY = new StateFlag("separate-region-inventory", false));
+        flagRegistry.register(DENY_EGG_PLACE = new StateFlag("deny-egg-place", false));
 
-        flagRegistry.register(TAKE_LECTERN_BOOK = new StateFlag("take-lectern-book", getConfig().getBoolean("default-lectern")));;
+        flagRegistry.register(STOP_PATH_CHANGE = new StateFlag("stop-path-change", getConfig().getBoolean("default-stop-path-change")));
+        flagRegistry.register(TAKE_LECTERN_BOOK = new StateFlag("take-lectern-book", getConfig().getBoolean("default-lectern")));
+        flagRegistry.register(USE_BOOK_SHELF = new StateFlag("use-book-shelf", getConfig().getBoolean("default-book-shelf")));;
         flagRegistry.register(USE_DISPENSER = new StateFlag("use-dispenser", getConfig().getBoolean("default-dispenser")));
         flagRegistry.register(USE_NOTE_BLOCK = new StateFlag("use-note-block", getConfig().getBoolean("default-note-block")));
         flagRegistry.register(USE_WORKBENCH = new StateFlag("use-workbench", getConfig().getBoolean("default-workbench")));

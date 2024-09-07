@@ -1,20 +1,20 @@
 package com.michaelelin.NerdFlags;
 
-import com.comphenix.protocol.PacketType;
-import com.comphenix.protocol.events.PacketContainer;
-import com.sk89q.worldguard.protection.flags.StateFlag;
+import java.lang.reflect.InvocationTargetException;
+import java.util.LinkedList;
+import java.util.List;
 
-import de.netzkronehd.wgregionevents.events.RegionEnterEvent;
-import de.netzkronehd.wgregionevents.events.RegionLeaveEvent;
-
+import org.bukkit.ChatColor;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.PlayerInventory;
 
-import java.lang.reflect.InvocationTargetException;
-import java.util.LinkedList;
-import java.util.List;
+import com.comphenix.protocol.PacketType;
+import com.comphenix.protocol.events.PacketContainer;
+import com.sk89q.worldguard.protection.flags.StateFlag;
 
 public class NerdFlagsRegionListener implements Listener {
 
@@ -25,11 +25,29 @@ public class NerdFlagsRegionListener implements Listener {
     }
 
     @EventHandler(priority = EventPriority.HIGH)
-    public void onPlayerEnteredRegion(RegionEnterEvent event) {
+    public void onPlayerEnteredRegion(PlayerEnterRegionEvent event) {
         Player player = event.getPlayer();
         StateFlag.State weatherState = event.getRegion().getFlag(plugin.WEATHER);
+        StateFlag.State separateInvState = event.getRegion().getFlag(plugin.REGION_SEPARATE_INVENTORY);
+        
+        String regionName = event.getRegion().getId();
+        
         if (weatherState == StateFlag.State.ALLOW) {
             setWeather(player, true);
+        }
+        
+        if(separateInvState == StateFlag.State.ALLOW && (!player.isOp() && !player.hasPermission("nerdflags.admin"))) {
+        	PlayerInventory playerInventory = player.getInventory();
+        	
+        	plugin.PLAYER_INVENTORY.put(regionName + "." + player.getUniqueId() + ".contents", playerInventory.getContents());
+        	plugin.PLAYER_INVENTORY.put(regionName + "." + player.getUniqueId() + ".armor", playerInventory.getArmorContents());
+        	
+        	ItemStack[] emptyInv = {};
+        	
+        	player.getInventory().setContents(emptyInv);
+        	player.updateInventory();
+        	
+        	player.sendMessage(ChatColor.GREEN + "Your inventory will be given back to you when you leave this region.");
         }
 
         String entryCommands = event.getRegion().getFlag(plugin.ENTRY_COMMANDS);
@@ -41,12 +59,36 @@ public class NerdFlagsRegionListener implements Listener {
     }
 
     @EventHandler(priority = EventPriority.HIGH)
-    public void onPlayerLeftRegion(RegionLeaveEvent event) {
+    public void onPlayerLeftRegion(PlayerLeaveRegionEvent event) {
         Player player = event.getPlayer();
         StateFlag.State weatherState = event.getRegion().getFlag(plugin.WEATHER);
+        StateFlag.State separateInvState = event.getRegion().getFlag(plugin.REGION_SEPARATE_INVENTORY);
+        
+        String regionName = event.getRegion().getId();
+        
         boolean storming = player.getWorld().hasStorm();
         if (weatherState == StateFlag.State.ALLOW && !storming) {
             setWeather(player, false);
+        }
+        
+        if(separateInvState == StateFlag.State.ALLOW) {
+        	if(plugin.PLAYER_INVENTORY.containsKey(regionName + "." + player.getUniqueId() + ".contents")) {
+        		ItemStack[] regionContents = plugin.PLAYER_INVENTORY.get(regionName + "." + player.getUniqueId() + ".contents");
+        		
+        		player.getInventory().setContents(regionContents);
+        		player.updateInventory();
+        		
+        		plugin.PLAYER_INVENTORY.remove(regionName + "." + player.getUniqueId() + ".contents");
+        	}
+        	
+        	if(plugin.PLAYER_INVENTORY.containsKey(regionName + "." + player.getUniqueId() + ".armor")) {
+        		ItemStack[] regionArmor = plugin.PLAYER_INVENTORY.get(regionName + "." + player.getUniqueId() + ".armor");
+        		
+        		player.getInventory().setArmorContents(regionArmor);
+        		player.updateInventory();
+        		
+        		plugin.PLAYER_INVENTORY.remove(regionName + "." + player.getUniqueId() + ".armor");
+        	}
         }
     }
 
@@ -56,7 +98,7 @@ public class NerdFlagsRegionListener implements Listener {
         weatherPacket.getFloat().write(0, 0F);
         try {
             plugin.protocolManager.sendServerPacket(player, weatherPacket);
-        } catch (InvocationTargetException e) {
+        } catch (Exception e) {
             e.printStackTrace();
         }
     }
