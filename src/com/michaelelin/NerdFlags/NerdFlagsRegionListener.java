@@ -4,6 +4,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.util.LinkedList;
 import java.util.List;
 
+import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -11,17 +12,32 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
+import org.bukkit.scoreboard.Scoreboard;
+import org.bukkit.scoreboard.ScoreboardManager;
+import org.bukkit.scoreboard.Team;
+import org.bukkit.scoreboard.Team.Option;
 
 import com.comphenix.protocol.PacketType;
 import com.comphenix.protocol.events.PacketContainer;
 import com.sk89q.worldguard.protection.flags.StateFlag;
 
 public class NerdFlagsRegionListener implements Listener {
+    private static ScoreboardManager sbm = null;
+    private static Scoreboard sb = null;
+    private static Team collisionTeam = null;
 
     private NerdFlagsPlugin plugin;
 
     NerdFlagsRegionListener(NerdFlagsPlugin plugin) {
         this.plugin = plugin;
+
+        sbm = Bukkit.getScoreboardManager();
+        sb = sbm.getMainScoreboard();
+
+        if(sb.getTeam("NoCollision") == null) {
+            collisionTeam = sb.registerNewTeam("NoCollision");
+            collisionTeam.setOption(Option.COLLISION_RULE, Team.OptionStatus.NEVER);
+        }
     }
 
     @EventHandler(priority = EventPriority.HIGH)
@@ -29,11 +45,16 @@ public class NerdFlagsRegionListener implements Listener {
         Player player = event.getPlayer();
         StateFlag.State weatherState = event.getRegion().getFlag(plugin.WEATHER);
         StateFlag.State separateInvState = event.getRegion().getFlag(plugin.REGION_SEPARATE_INVENTORY);
+        StateFlag.State collisionState = event.getRegion().getFlag(plugin.DISABLE_COLLISION);
         
         String regionName = event.getRegion().getId();
         
         if (weatherState == StateFlag.State.ALLOW) {
             setWeather(player, true);
+        }
+
+        if(collisionState == StateFlag.State.ALLOW) {
+            collisionTeam.addEntry(player.getName());
         }
         
         if(separateInvState == StateFlag.State.ALLOW && (!player.isOp() && !player.hasPermission("nerdflags.admin"))) {
@@ -63,12 +84,17 @@ public class NerdFlagsRegionListener implements Listener {
         Player player = event.getPlayer();
         StateFlag.State weatherState = event.getRegion().getFlag(plugin.WEATHER);
         StateFlag.State separateInvState = event.getRegion().getFlag(plugin.REGION_SEPARATE_INVENTORY);
+        StateFlag.State collisionState = event.getRegion().getFlag(plugin.DISABLE_COLLISION);
         
         String regionName = event.getRegion().getId();
         
         boolean storming = player.getWorld().hasStorm();
         if (weatherState == StateFlag.State.ALLOW && !storming) {
             setWeather(player, false);
+        }
+
+        if(collisionState == StateFlag.State.ALLOW) {
+            collisionTeam.removeEntry(player.getName());
         }
         
         if(separateInvState == StateFlag.State.ALLOW) {

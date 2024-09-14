@@ -30,7 +30,7 @@ public class Entry extends Handler {
 	@Override
 	public boolean onCrossBoundary(LocalPlayer player, Location from, Location to, ApplicableRegionSet toSet,
 			Set<ProtectedRegion> entered, Set<ProtectedRegion> exited, MoveType moveType) {
-		
+				
 		for(ProtectedRegion exitedRegion : exited) {
 			PlayerLeaveRegionEvent e = new PlayerLeaveRegionEvent(BukkitAdapter.adapt(player), exitedRegion);
 			

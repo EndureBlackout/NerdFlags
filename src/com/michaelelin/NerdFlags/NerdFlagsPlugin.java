@@ -95,6 +95,7 @@ public class NerdFlagsPlugin extends JavaPlugin {
     public StateFlag USE_BOOK_SHELF;
     public StateFlag STOP_PATH_CHANGE;
     public StateFlag DENY_EGG_PLACE;
+    public StateFlag DISABLE_COLLISION;
     
     public String CONNECTION_STRING;
     public String MYSQL_USER;
@@ -274,6 +275,7 @@ public class NerdFlagsPlugin extends JavaPlugin {
         flagRegistry.register(ENTRY_COMMANDS = new StringFlag("entry-commands"));
         flagRegistry.register(REGION_SEPARATE_INVENTORY = new StateFlag("separate-region-inventory", false));
         flagRegistry.register(DENY_EGG_PLACE = new StateFlag("deny-egg-place", false));
+        flagRegistry.register(DISABLE_COLLISION = new StateFlag("disable-collision", false));
 
         flagRegistry.register(STOP_PATH_CHANGE = new StateFlag("stop-path-change", getConfig().getBoolean("default-stop-path-change")));
         flagRegistry.register(TAKE_LECTERN_BOOK = new StateFlag("take-lectern-book", getConfig().getBoolean("default-lectern")));
