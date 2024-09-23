@@ -36,8 +36,11 @@ public class NerdFlagsRegionListener implements Listener {
 
         if(sb.getTeam("NoCollision") == null) {
             collisionTeam = sb.registerNewTeam("NoCollision");
-            collisionTeam.setOption(Option.COLLISION_RULE, Team.OptionStatus.NEVER);
+        } else {
+            collisionTeam = sb.getTeam("NoCollision");
         }
+
+        collisionTeam.setOption(Option.COLLISION_RULE, Team.OptionStatus.NEVER);
     }
 
     @EventHandler(priority = EventPriority.HIGH)
@@ -55,6 +58,7 @@ public class NerdFlagsRegionListener implements Listener {
 
         if(collisionState == StateFlag.State.ALLOW) {
             collisionTeam.addEntry(player.getName());
+            player.setCollidable(false);
         }
         
         if(separateInvState == StateFlag.State.ALLOW && (!player.isOp() && !player.hasPermission("nerdflags.admin"))) {
@@ -95,6 +99,7 @@ public class NerdFlagsRegionListener implements Listener {
 
         if(collisionState == StateFlag.State.ALLOW) {
             collisionTeam.removeEntry(player.getName());
+            player.setCollidable(true);
         }
         
         if(separateInvState == StateFlag.State.ALLOW) {
